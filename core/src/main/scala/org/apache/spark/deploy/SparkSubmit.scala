@@ -481,6 +481,9 @@ object SparkSubmit {
       OptionAssigner(args.keytab, MESOS, CLUSTER),
       OptionAssigner(args.tgt, MESOS, CLUSTER),
 
+      // Mesos: Proxy User
+      OptionAssigner(args.proxyUser, MESOS, ALL_DEPLOY_MODES, sysProp = "spark.mesos.proxyuser"),
+
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
