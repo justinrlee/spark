@@ -245,7 +245,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   logInfo("--------------------------- Justin is here ------------------------------------")
   logInfo(proxyUser)
   logInfo(principal)
-  logInfo(conf)
+  // logInfo(conf)
   var kerberosBackend: MesosKerberosHandler = null
   if (principal != null) {
     kerberosBackend = new MesosKerberosHandler(conf, principal, this)
