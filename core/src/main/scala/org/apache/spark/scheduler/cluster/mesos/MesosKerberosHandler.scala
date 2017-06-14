@@ -83,8 +83,10 @@ class MesosKerberosHandler(conf: SparkConf,
 
     // logInfo("Auth method:")
     // logInfo(UserGroupInformation.getAuthenticationMethod())
-    logInfo("Proxy mode:")
-    logInfo(proxy)
+    if(proxy) {
+      logInfo("--------------------------- Justin is here ------------------------------------")
+      logInfo("Proxy mode!")
+    }
 
 
     require(keytab64 != null || tgt64 != null, "keytab or tgt required")
