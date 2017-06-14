@@ -268,6 +268,12 @@ private[spark] class CoarseMesosSchedulerBackend(
     val initialTokens = kerberosBackend.createHDFSDelegationTokens
     val initialTokensBuf = DatatypeConverter.printBase64Binary(initialTokens)
     conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)
+  } else if (proxyUser != null) {
+
+    kerberosBackend = new MesosKerberosHandler(conf, proxyUser, this)
+    val initialTokens = kerberosBackend.createHDFSDelegationTokens
+    val initialTokensBuf = DatatypeConverter.printBase64Binary(initialTokens)
+    conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)    
   }
 
   protected def driverURL: String = {
