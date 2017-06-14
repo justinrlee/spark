@@ -25,6 +25,7 @@ import javax.xml.bind.DatatypeConverter
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{Buffer, HashMap, HashSet}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
@@ -245,6 +246,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   logInfo("--------------------------- Justin is here ------------------------------------")
   logInfo(proxyUser)
   logInfo(principal)
+  logInfo(UserGroupInformation.getLoginUser())
+  // logInfo(conf.get("spark.mesos.kerberos.tgtBase64", null))
   // logInfo(conf)
   var kerberosBackend: MesosKerberosHandler = null
   if (principal != null) {
