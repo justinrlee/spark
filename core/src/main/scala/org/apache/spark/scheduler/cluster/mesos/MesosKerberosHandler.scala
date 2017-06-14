@@ -81,6 +81,7 @@ class MesosKerberosHandler(conf: SparkConf,
     val keytab64 = conf.get("spark.mesos.kerberos.keytabBase64", null)
     val tgt64 = conf.get("spark.mesos.kerberos.tgtBase64", null)
 
+      logInfo("in createHDFSDelegationTokens")
     // logInfo("Auth method:")
     // logInfo(UserGroupInformation.getAuthenticationMethod())
     if(proxy) {
