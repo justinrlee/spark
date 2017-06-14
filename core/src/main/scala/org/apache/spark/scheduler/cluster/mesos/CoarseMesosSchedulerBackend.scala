@@ -246,7 +246,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   logInfo("--------------------------- Justin is here ------------------------------------")
   logInfo(proxyUser)
   logInfo(principal)
-  logInfo(UserGroupInformation.getLoginUser())
+  logInfo(UserGroupInformation.getLoginUser().toString())
   // logInfo(conf.get("spark.mesos.kerberos.tgtBase64", null))
   // logInfo(conf)
   var kerberosBackend: MesosKerberosHandler = null
