@@ -244,11 +244,16 @@ private[spark] class CoarseMesosSchedulerBackend(
   val principal = conf.get("spark.yarn.principal", null)
   val proxyUser = conf.get("spark.mesos.proxyuser", null)
   logInfo("--------------------------- Justin is here ------------------------------------")
+  logInfo("proxyUser:")
   logInfo(proxyUser)
+  logInfo("principal:")
   logInfo(principal)
+  logInfo("getLoginUser:")
   logInfo(UserGroupInformation.getLoginUser().toString())
+  logInfo("getCurrentUser:")
   logInfo(UserGroupInformation.getCurrentUser().toString())
   if (proxyUser != null) {
+    logInfo("createProxyUser:")
     logInfo(UserGroupInformation.createProxyUser(proxyUser, UserGroupInformation.getLoginUser()).toString())
   }
   // logInfo(conf.get("spark.mesos.kerberos.tgtBase64", null))
