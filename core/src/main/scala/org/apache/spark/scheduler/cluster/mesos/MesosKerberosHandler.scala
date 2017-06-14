@@ -81,10 +81,11 @@ class MesosKerberosHandler(conf: SparkConf,
     val keytab64 = conf.get("spark.mesos.kerberos.keytabBase64", null)
     val tgt64 = conf.get("spark.mesos.kerberos.tgtBase64", null)
 
-    logInfo("Auth method:")
-    logInfo(UserGroupInformation.getAuthenticationMethod())
+    // logInfo("Auth method:")
+    // logInfo(UserGroupInformation.getAuthenticationMethod())
     logInfo("Proxy mode:")
     logInfo(proxy)
+
 
     require(keytab64 != null || tgt64 != null, "keytab or tgt required")
     require(keytab64 == null || tgt64 == null, "keytab and tgt cannot be used at the same time")
