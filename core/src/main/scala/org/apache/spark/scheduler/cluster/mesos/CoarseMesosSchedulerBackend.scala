@@ -262,7 +262,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   // logInfo(conf)
   var kerberosBackend: MesosKerberosHandler = null
   if (principal != null) {
-    kerberosBackend = new MesosKerberosHandler(conf, principal, this)
+    kerberosBackend = new MesosKerberosHandler(conf, principal, this, false)
 
     // store tokens in spark property which is sent to the executors initially
     val initialTokens = kerberosBackend.createHDFSDelegationTokens
@@ -270,7 +270,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)
   } else if (proxyUser != null) {
 
-    kerberosBackend = new MesosKerberosHandler(conf, proxyUser, this)
+    kerberosBackend = new MesosKerberosHandler(conf, proxyUser, this, true)
     val initialTokens = kerberosBackend.createHDFSDelegationTokens
     val initialTokensBuf = DatatypeConverter.printBase64Binary(initialTokens)
     conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)    

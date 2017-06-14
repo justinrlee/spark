@@ -48,7 +48,8 @@ trait DelegationTokenBroadcaster {
 private[spark]
 class MesosKerberosHandler(conf: SparkConf,
     principal: String,
-    broadcaster: DelegationTokenBroadcaster)
+    broadcaster: DelegationTokenBroadcaster,
+    proxy: Boolean)
   extends Object with Logging {
 
   @volatile private var renewalCredentials: Credentials = null
@@ -79,6 +80,12 @@ class MesosKerberosHandler(conf: SparkConf,
     // get keytab or tgt, and login
     val keytab64 = conf.get("spark.mesos.kerberos.keytabBase64", null)
     val tgt64 = conf.get("spark.mesos.kerberos.tgtBase64", null)
+
+    logInfo("Auth method:")
+    logInfo(UserGroupInformation.getAuthenticationMethod())
+    logInfo("Proxy mode:")
+    logInfo(proxy)
+
     require(keytab64 != null || tgt64 != null, "keytab or tgt required")
     require(keytab64 == null || tgt64 == null, "keytab and tgt cannot be used at the same time")
 
