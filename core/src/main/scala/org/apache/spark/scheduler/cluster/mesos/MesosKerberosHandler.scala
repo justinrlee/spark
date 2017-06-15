@@ -107,18 +107,21 @@ class MesosKerberosHandler(conf: SparkConf,
     try {
       // login with _new_ user in order to start without any token (necessary to make sure that
       // new tokens are really downloaded, even when not yet expired)
-      val ugi
-      if(proxy) {
-        ugi = UserGroupInformation.getCurrentUser()
+
+      val ugi = if (proxy) {
+        UserGroupInformation.getCurrentUser()
+      } else if (keytab != null) {
+        UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, kerberosSecretFile.toString)
       } else {
-        //val ugi = if (keytab64 != null) {
-        ugi = if (keytab64 != null) {
-          UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, kerberosSecretFile.toString)
-        }
-        else {
-          UserGroupInformation.getUGIFromTicketCache(kerberosSecretFile.toString, principal)
-        }
+        UserGroupInformation.getUGIFromTicketCache(kerberosSecretFile.toString, principal)
       }
+
+      //val ugi = if (keytab64 != null) {
+      //  UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, kerberosSecretFile.toString)
+      //}
+      //else {
+      //  UserGroupInformation.getUGIFromTicketCache(kerberosSecretFile.toString, principal)
+      //}
 
       // get tokens
       val ugiCreds = getHDFSDelegationTokens(ugi)
