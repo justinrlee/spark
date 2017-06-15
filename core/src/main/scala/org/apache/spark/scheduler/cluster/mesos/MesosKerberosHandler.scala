@@ -110,7 +110,7 @@ class MesosKerberosHandler(conf: SparkConf,
 
       val ugi = if (proxy) {
         UserGroupInformation.getCurrentUser()
-      } else if (keytab != null) {
+      } else if (keytab64 != null) {
         UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, kerberosSecretFile.toString)
       } else {
         UserGroupInformation.getUGIFromTicketCache(kerberosSecretFile.toString, principal)
