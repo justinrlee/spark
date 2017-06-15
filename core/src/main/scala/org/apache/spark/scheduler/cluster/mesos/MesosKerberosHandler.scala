@@ -97,7 +97,7 @@ class MesosKerberosHandler(conf: SparkConf,
     logInfo(s"Logging in as $principal with $mode to retrieve HDFS delegation tokens")
 
     // write keytab or tgt into a temporary file
-    val bytes = if (proxy != false) {
+    val bytes = if (proxy == false) {
       DatatypeConverter.parseBase64Binary(if (keytab64 != null) keytab64 else tgt64)
     } else {
       Array[Byte](1) // Dummy value to get the compiler to stop complaining.
