@@ -90,8 +90,8 @@ class MesosKerberosHandler(conf: SparkConf,
     }
 
 
-    require(keytab64 != null || tgt64 != null, "keytab or tgt required")
-    require(keytab64 == null || tgt64 == null, "keytab and tgt cannot be used at the same time")
+    // require(keytab64 != null || tgt64 != null, "keytab or tgt required")
+    // require(keytab64 == null || tgt64 == null, "keytab and tgt cannot be used at the same time")
 
     val mode = if (keytab64 != null) "keytab" else "tgt"
     logInfo(s"Logging in as $principal with $mode to retrieve HDFS delegation tokens")
