@@ -97,15 +97,15 @@ class MesosKerberosHandler(conf: SparkConf,
     logInfo(s"Logging in as $principal with $mode to retrieve HDFS delegation tokens")
 
     // write keytab or tgt into a temporary file
-    if(proxy == false) {
-      val bytes = DatatypeConverter.parseBase64Binary(if (keytab64 != null) keytab64 else tgt64)
-      val kerberosSecretFile = Files.createTempFile("spark-mesos-kerberos-token", ".tmp",
-        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
-      kerberosSecretFile.toFile.deleteOnExit() // just to be sure
-      Files.write(kerberosSecretFile, bytes)
+    val bytes = if (proxy != false) {
+      DatatypeConverter.parseBase64Binary(if (keytab64 != null) keytab64 else tgt64)
     } else {
-      logInfo("Skipping secretfile")
+      Array[Byte](1) // Dummy value to get the compiler to stop complaining.
     }
+    val kerberosSecretFile = Files.createTempFile("spark-mesos-kerberos-token", ".tmp",
+      PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+    kerberosSecretFile.toFile.deleteOnExit() // just to be sure
+    Files.write(kerberosSecretFile, bytes)
 
     // login
     try {
