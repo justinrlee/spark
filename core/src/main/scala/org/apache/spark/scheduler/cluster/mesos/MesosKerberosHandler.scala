@@ -97,11 +97,15 @@ class MesosKerberosHandler(conf: SparkConf,
     logInfo(s"Logging in as $principal with $mode to retrieve HDFS delegation tokens")
 
     // write keytab or tgt into a temporary file
-    val bytes = DatatypeConverter.parseBase64Binary(if (keytab64 != null) keytab64 else tgt64)
-    val kerberosSecretFile = Files.createTempFile("spark-mesos-kerberos-token", ".tmp",
-      PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
-    kerberosSecretFile.toFile.deleteOnExit() // just to be sure
-    Files.write(kerberosSecretFile, bytes)
+    if(proxy == false) {
+      val bytes = DatatypeConverter.parseBase64Binary(if (keytab64 != null) keytab64 else tgt64)
+      val kerberosSecretFile = Files.createTempFile("spark-mesos-kerberos-token", ".tmp",
+        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+      kerberosSecretFile.toFile.deleteOnExit() // just to be sure
+      Files.write(kerberosSecretFile, bytes)
+    } else {
+      logInfo("Skipping secretfile")
+    }
 
     // login
     try {
@@ -124,6 +128,7 @@ class MesosKerberosHandler(conf: SparkConf,
       //}
 
       // get tokens
+      logInfo("Getting tokens")
       val ugiCreds = getHDFSDelegationTokens(ugi)
       logInfo(s"Got ${ugiCreds.numberOfTokens()} HDFS delegation tokens")
 
