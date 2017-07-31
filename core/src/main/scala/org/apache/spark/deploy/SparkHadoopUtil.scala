@@ -30,6 +30,7 @@ import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
