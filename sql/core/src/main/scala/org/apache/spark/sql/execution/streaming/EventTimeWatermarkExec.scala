@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.AccumulatorV2
@@ -81,13 +81,10 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
 case class EventTimeWatermarkExec(
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: SparkPlan) extends SparkPlan {
+    child: SparkPlan) extends UnaryExecNode {
 
   val eventTimeStats = new EventTimeStatsAccum()
-  val delayMs = {
-    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
-    delay.milliseconds + delay.months * millisPerMonth
-  }
+  val delayMs = EventTimeWatermark.getDelayMs(delay)
 
   sparkContext.register(eventTimeStats)
 
@@ -105,15 +102,19 @@ case class EventTimeWatermarkExec(
   override val output: Seq[Attribute] = child.output.map { a =>
     if (a semanticEquals eventTime) {
       val updatedMetadata = new MetadataBuilder()
-          .withMetadata(a.metadata)
-          .putLong(EventTimeWatermark.delayKey, delayMs)
-          .build()
-
+        .withMetadata(a.metadata)
+        .putLong(EventTimeWatermark.delayKey, delayMs)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else if (a.metadata.contains(EventTimeWatermark.delayKey)) {
+      // Remove existing watermark
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .remove(EventTimeWatermark.delayKey)
+        .build()
       a.withMetadata(updatedMetadata)
     } else {
       a
     }
   }
-
-  override def children: Seq[SparkPlan] = child :: Nil
 }

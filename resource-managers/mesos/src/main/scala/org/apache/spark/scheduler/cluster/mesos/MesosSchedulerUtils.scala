@@ -36,8 +36,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
-
-
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
@@ -45,9 +43,6 @@ import org.apache.spark.util.Utils
 trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
   private final val registerLatch = new CountDownLatch(1)
-
-  // Driver for talking to Mesos
-  protected var mesosDriver: SchedulerDriver = null
 
   /**
    * Creates a new MesosSchedulerDriver that communicates to the Mesos master.
@@ -115,10 +110,6 @@ trait MesosSchedulerUtils extends Logging {
    */
   def startScheduler(newDriver: SchedulerDriver): Unit = {
     synchronized {
-      if (mesosDriver != null) {
-        registerLatch.await()
-        return
-      }
       @volatile
       var error: Option[Exception] = None
 
@@ -128,8 +119,7 @@ trait MesosSchedulerUtils extends Logging {
         setDaemon(true)
         override def run() {
           try {
-            mesosDriver = newDriver
-            val ret = mesosDriver.run()
+            val ret = newDriver.run()
             logInfo("driver.run() returned with code " + ret)
             if (ret != null && ret.equals(Status.DRIVER_ABORTED)) {
               error = Some(new SparkException("Error starting driver, DRIVER_ABORTED"))
@@ -247,7 +237,7 @@ trait MesosSchedulerUtils extends Logging {
   }
 
   /**
-   * Converts the attributes from the resource offer into a Map of name -> Attribute Value
+   * Converts the attributes from the resource offer into a Map of name to Attribute Value
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
@@ -304,7 +294,7 @@ trait MesosSchedulerUtils extends Logging {
 
   /**
    * Parses the attributes constraints provided to spark and build a matching data struct:
-   *  Map[<attribute-name>, Set[values-to-match]]
+   *  {@literal Map[<attribute-name>, Set[values-to-match]}
    *  The constraints are specified as ';' separated key-value pairs where keys and values
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
@@ -362,7 +352,7 @@ trait MesosSchedulerUtils extends Logging {
    * container overheads.
    *
    * @param sc SparkContext to use to get `spark.mesos.executor.memoryOverhead` value
-   * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
+   * @return memory requirement as (0.1 * memoryOverhead) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
@@ -379,12 +369,24 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  protected def getRejectOfferDurationForUnmetConstraints(sc: SparkContext): Long = {
-    sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForUnmetConstraints", "120s")
+  private def getRejectOfferDurationStr(conf: SparkConf): String = {
+    conf.get("spark.mesos.rejectOfferDuration", "120s")
   }
 
-  protected def getRejectOfferDurationForReachedMaxCores(sc: SparkContext): Long = {
-    sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForReachedMaxCores", "120s")
+  protected def getRejectOfferDuration(conf: SparkConf): Long = {
+    Utils.timeStringAsSeconds(getRejectOfferDurationStr(conf))
+  }
+
+  protected def getRejectOfferDurationForUnmetConstraints(conf: SparkConf): Long = {
+    conf.getTimeAsSeconds(
+      "spark.mesos.rejectOfferDurationForUnmetConstraints",
+      getRejectOfferDurationStr(conf))
+  }
+
+  protected def getRejectOfferDurationForReachedMaxCores(conf: SparkConf): Long = {
+    conf.getTimeAsSeconds(
+      "spark.mesos.rejectOfferDurationForReachedMaxCores",
+      getRejectOfferDurationStr(conf))
   }
 
   /**
@@ -434,7 +436,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  val managedPortNames = List("spark.executor.port", BLOCK_MANAGER_PORT.key)
+  val managedPortNames = List(BLOCK_MANAGER_PORT.key)
 
   /**
    * The values of the non-zero ports to be used by the executor process.
@@ -521,6 +523,35 @@ trait MesosSchedulerUtils extends Logging {
     case TaskState.FAILED => MesosTaskState.TASK_FAILED
     case TaskState.KILLED => MesosTaskState.TASK_KILLED
     case TaskState.LOST => MesosTaskState.TASK_LOST
+  }
+
+  protected def declineOffer(
+    driver: org.apache.mesos.SchedulerDriver,
+    offer: Offer,
+    reason: Option[String] = None,
+    refuseSeconds: Option[Long] = None): Unit = {
+
+    val id = offer.getId.getValue
+    val offerAttributes = toAttributeMap(offer.getAttributesList)
+    val mem = getResource(offer.getResourcesList, "mem")
+    val cpus = getResource(offer.getResourcesList, "cpus")
+    val ports = getRangeResource(offer.getResourcesList, "ports")
+
+    logDebug(s"Declining offer: $id with " +
+      s"attributes: $offerAttributes " +
+      s"mem: $mem " +
+      s"cpu: $cpus " +
+      s"port: $ports " +
+      refuseSeconds.map(s => s"for ${s} seconds ").getOrElse("") +
+      reason.map(r => s" (reason: $r)").getOrElse(""))
+
+    refuseSeconds match {
+      case Some(seconds) =>
+        val filters = Filters.newBuilder().setRefuseSeconds(seconds).build()
+        driver.declineOffer(offer.getId, filters)
+      case _ =>
+        driver.declineOffer(offer.getId)
+    }
   }
 
   // Pass the krb5.conf to the scheduler

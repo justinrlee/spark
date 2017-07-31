@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -36,7 +37,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.functionRegistry.dropFunction("dummyPythonUDF")
+    spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
     super.afterAll()
   }
 
@@ -64,7 +65,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("Python UDF: no push down on non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
-      .where("b > 4 and dummyPythonUDF(a) and rand() > 3")
+      .where("b > 4 and dummyPythonUDF(a) and rand() > 0.3")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
@@ -76,7 +77,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("Python UDF: no push down on predicates starting from the first non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
-      .where("dummyPythonUDF(a) and rand() > 3 and b > 4")
+      .where("dummyPythonUDF(a) and rand() > 0.3 and b > 4")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(And(_: And, _: GreaterThan), InputAdapter(_: BatchEvalPythonExec)) => f
     }
@@ -86,13 +87,11 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   test("Python UDF refers to the attributes from more than one child") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
     val df2 = Seq(("Hello", 4)).toDF("c", "d")
-    val joinDF = df.join(df2).where("dummyPythonUDF(a, c) == dummyPythonUDF(d, c)")
-
-    val e = intercept[RuntimeException] {
-      joinDF.queryExecution.executedPlan
-    }.getMessage
-    assert(Seq("Invalid PythonUDF dummyUDF", "requires attributes from more than one child")
-      .forall(e.contains))
+    val joinDF = df.crossJoin(df2).where("dummyPythonUDF(a, c) == dummyPythonUDF(d, c)")
+    val qualifiedPlanNodes = joinDF.queryExecution.executedPlan.collect {
+      case b: BatchEvalPythonExec => b
+    }
+    assert(qualifiedPlanNodes.size == 1)
   }
 }
 

@@ -17,31 +17,32 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.security.{ConfigurableCredentialManager, CredentialUpdater}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.security.CredentialUpdater
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
+
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -90,8 +91,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    credentialUpdater =
-      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    val hadoopConf = newConfiguration(sparkConf)
+    val credentialManager = new YARNHadoopDelegationTokenManager(
+      sparkConf,
+      hadoopConf,
+      YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
+    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
 
@@ -105,6 +110,21 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
+  }
+
+  /** The filesystems for which YARN should fetch delegation tokens. */
+  private[spark] def hadoopFSsToAccess(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Set[FileSystem] = {
+    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .toSet
+
+    val stagingFS = sparkConf.get(STAGING_DIR)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .getOrElse(FileSystem.get(hadoopConf))
+
+    filesystemsToAccess + stagingFS
   }
 }
 
@@ -137,7 +157,12 @@ object YarnSparkHadoopUtil {
    * If the map already contains this key, append the value to the existing value instead.
    */
   def addPathToEnvironment(env: HashMap[String, String], key: String, value: String): Unit = {
-    val newValue = if (env.contains(key)) { env(key) + getClassPathSeparator  + value } else value
+    val newValue =
+      if (env.contains(key)) {
+        env(key) + ApplicationConstants.CLASS_PATH_SEPARATOR  + value
+      } else {
+        value
+      }
     env.put(key, newValue)
   }
 
@@ -156,8 +181,8 @@ object YarnSparkHadoopUtil {
         while (m.find()) {
           val variable = m.group(1)
           var replace = ""
-          if (env.get(variable) != None) {
-            replace = env.get(variable).get
+          if (env.contains(variable)) {
+            replace = env(variable)
           } else {
             // if this key is not configured for the child .. get it from the env
             replace = System.getenv(variable)
@@ -235,13 +260,11 @@ object YarnSparkHadoopUtil {
         YarnCommandBuilderUtils.quoteForBatchScript(arg)
       } else {
         val escaped = new StringBuilder("'")
-        for (i <- 0 to arg.length() - 1) {
-          arg.charAt(i) match {
-            case '$' => escaped.append("\\$")
-            case '"' => escaped.append("\\\"")
-            case '\'' => escaped.append("'\\''")
-            case c => escaped.append(c)
-          }
+        arg.foreach {
+          case '$' => escaped.append("\\$")
+          case '"' => escaped.append("\\\"")
+          case '\'' => escaped.append("'\\''")
+          case c => escaped.append(c)
         }
         escaped.append("'").toString()
       }
@@ -263,33 +286,6 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Expand environment variable using Yarn API.
-   * If environment.$$() is implemented, return the result of it.
-   * Otherwise, return the result of environment.$()
-   * Note: $$() is added in Hadoop 2.4.
-   */
-  private lazy val expandMethod =
-    Try(classOf[Environment].getMethod("$$"))
-      .getOrElse(classOf[Environment].getMethod("$"))
-
-  def expandEnvironment(environment: Environment): String =
-    expandMethod.invoke(environment).asInstanceOf[String]
-
-  /**
-   * Get class path separator using Yarn API.
-   * If ApplicationConstants.CLASS_PATH_SEPARATOR is implemented, return it.
-   * Otherwise, return File.pathSeparator
-   * Note: CLASS_PATH_SEPARATOR is added in Hadoop 2.4.
-   */
-  private lazy val classPathSeparatorField =
-    Try(classOf[ApplicationConstants].getField("CLASS_PATH_SEPARATOR"))
-      .getOrElse(classOf[File].getField("pathSeparator"))
-
-  def getClassPathSeparator(): String = {
-    classPathSeparatorField.get(null).asInstanceOf[String]
-  }
-
-  /**
    * Getting the initial target number of executors depends on whether dynamic allocation is
    * enabled.
    * If not using dynamic allocation it gets the number of executors requested by the user.
@@ -307,10 +303,7 @@ object YarnSparkHadoopUtil {
 
       initialNumExecutors
     } else {
-      val targetNumExecutors =
-        sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
-      // System property can override environment variable.
-      conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
+      conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
     }
   }
 }
