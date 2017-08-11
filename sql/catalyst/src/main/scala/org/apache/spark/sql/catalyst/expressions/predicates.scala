@@ -339,6 +339,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
       defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
+
+  protected lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 }
 
 
@@ -363,17 +365,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
 
   override def symbol: String = "="
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (left.dataType == FloatType) {
-      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-    } else if (left.dataType == DoubleType) {
-      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-    } else if (left.dataType != BinaryType) {
-      input1 == input2
-    } else {
-      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
-    }
-  }
+  protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
@@ -397,15 +389,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      if (left.dataType == FloatType) {
-        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-      } else if (left.dataType == DoubleType) {
-        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-      } else if (left.dataType != BinaryType) {
-        input1 == input2
-      } else {
-        java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
-      }
+      ordering.equiv(input1, input2)
     }
   }
 
@@ -428,8 +412,6 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
   override def symbol: String = "<"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
@@ -439,8 +421,6 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<="
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
@@ -452,8 +432,6 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
   override def symbol: String = ">"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
@@ -463,8 +441,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
